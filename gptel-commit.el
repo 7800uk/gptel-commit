@@ -72,6 +72,12 @@ For GPTel debugging, use `gptel-log-level' instead."
   :type 'boolean
   :group 'gptel-commit)
 
+(defcustom gptel-commit-loading-message "# Generating commit message with gptel..."
+  "Message shown in the commit buffer while generating.
+Set to nil to disable the loading indicator."
+  :type '(choice string (const :tag "Disabled" nil))
+  :group 'gptel-commit)
+
 (defvar gptel-commit-prompt
   "You are an expert at writing Git commit messages.
 Generate **only** the commit message, nothing else.
@@ -142,6 +148,12 @@ Only used when `gptel-commit-use-claude-code' is nil.")
 (defvar gptel-commit--insert-position nil
   "Position where commit message should be inserted.")
 
+(defvar gptel-commit--loading-beg nil
+  "Start position of loading indicator.")
+
+(defvar gptel-commit--loading-end nil
+  "End position of loading indicator.")
+
 (defvar gptel-commit--claude-process nil
   "Current Claude Code process.")
 
@@ -153,6 +165,32 @@ Only used when `gptel-commit-use-claude-code' is nil.")
       (insert (format-time-string "[%Y-%m-%d %H:%M:%S] "))
       (insert (apply #'format message args))
       (insert "\n"))))
+
+(defun gptel-commit--insert-loading ()
+  "Insert loading indicator at `gptel-commit--insert-position'."
+  (when gptel-commit-loading-message
+    (gptel-commit--remove-loading)
+    (with-current-buffer gptel-commit--current-buffer
+      (save-excursion
+        (goto-char gptel-commit--insert-position)
+        (setq gptel-commit--loading-beg (point))
+        (insert gptel-commit-loading-message "\n")
+        (setq gptel-commit--loading-end (point))
+        (setq gptel-commit--insert-position (point))))))
+
+(defun gptel-commit--remove-loading ()
+  "Remove loading indicator from the commit buffer."
+  (when (and gptel-commit--loading-beg gptel-commit--loading-end)
+    (when (buffer-live-p gptel-commit--current-buffer)
+      (with-current-buffer gptel-commit--current-buffer
+        (let ((beg gptel-commit--loading-beg)
+              (end gptel-commit--loading-end))
+          (when (and (<= beg (point-max)) (<= end (point-max)))
+            (delete-region beg end))
+          (when (= gptel-commit--insert-position end)
+            (setq gptel-commit--insert-position beg)))))
+    (setq gptel-commit--loading-beg nil
+          gptel-commit--loading-end nil)))
 
 (defun gptel-commit--wildcard-to-regexp (glob)
   "Convert shell glob GLOB to a regular expression."
@@ -193,6 +231,7 @@ Only used when `gptel-commit-use-claude-code' is nil.")
   (when-let* ((buffer gptel-commit--current-buffer))
     (when (buffer-live-p buffer)
       (with-current-buffer buffer
+        (gptel-commit--remove-loading)
         (save-excursion
           (goto-char gptel-commit--insert-position)
           ;; Parse stream-json format if streaming
@@ -260,6 +299,7 @@ Only used when `gptel-commit-use-claude-code' is nil.")
     (setq gptel-commit--current-buffer buffer)
     (with-current-buffer buffer
       (setq gptel-commit--insert-position (point))
+      (gptel-commit--insert-loading)
 
       (if gptel-commit-stream
           (progn
@@ -292,11 +332,12 @@ Only used when `gptel-commit-use-claude-code' is nil.")
                                                                (if (> (length output-accumulator) 200)
                                                                    (concat (substring output-accumulator 0 200) "...")
                                                                  output-accumulator))
-                               (with-current-buffer buffer
-                                 (save-excursion
-                                   (goto-char gptel-commit--insert-position)
-                                   (insert output-accumulator)))
-                               (run-hooks 'gptel-commit-after-insert-hook)))))
+                               (gptel-commit--remove-loading)
+                             (with-current-buffer buffer
+                               (save-excursion
+                                 (goto-char gptel-commit--insert-position)
+                                 (insert output-accumulator)))
+                             (run-hooks 'gptel-commit-after-insert-hook)))))
           (gptel-commit--claude-debug-log "Started non-streaming Claude process"))))))
 
 (defun gptel-commit--setup-request-args ()
@@ -310,6 +351,7 @@ INFO is a plist with additional information."
   (when-let* ((buffer gptel-commit--current-buffer))
     (when (buffer-live-p buffer)
       (with-current-buffer buffer
+        (gptel-commit--remove-loading)
         (cond
          ((and gptel-commit-stream (stringp response))
           (save-excursion
@@ -346,6 +388,7 @@ INFO is a plist with additional information."
         (setq gptel-commit--current-buffer buffer)
         (with-current-buffer buffer
           (setq gptel-commit--insert-position (point))
+          (gptel-commit--insert-loading)
           (gptel-request prompt
             :system gptel-commit-prompt
             :stream gptel-commit-stream
