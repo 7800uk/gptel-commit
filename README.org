@@ -7,6 +7,26 @@
 
 /This README was generated with assistance from Claude Sonnet 4/
 
+#+begin_quote
+This is the [[https://github.com/7800uk/gptel-commit][7800uk fork]] of
+[[https://github.com/lakkiy/gptel-commit][lakkiy/gptel-commit]], kept current with
+Emacs master (32.0.50) and the Emacs 31 branch.  Over upstream it:
+
+- byte-compiles without warnings on Emacs 31 and 32, and requires Emacs 29.1
+  (for =defvar-keymap=);
+- passes staged file names to git as arguments rather than through a shell,
+  so a file whose name has a space in it is no longer silently left out;
+- adds =gptel-commit-model= beside =gptel-commit-backend=, and makes both
+  default to nil — the backend and model in force when the message is made,
+  not whatever =gptel-backend= was when this file happened to load;
+- sends a diffstat ahead of the diff and cuts the diff at
+  =gptel-commit-max-diff-chars=, so one huge file cannot exhaust the window;
+- reports failed and aborted requests instead of running the after-insert hook
+  as though a message had arrived;
+- adds =gptel-commit-generate=, which hands the message to a callback instead
+  of a commit buffer, for code that commits by itself.
+#+end_quote
+
 ** Changelog v0.2.0
 
 *** New Features
